@@ -1,1 +1,3 @@
 Spatio-Temporal Encoding (STE) for event spotting in soccer videos.
+
+Run the main.py to train the network and evaluate the results.
