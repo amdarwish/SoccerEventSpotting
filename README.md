@@ -1,2 +1,2 @@
 # SoccerEventSpotting
-Working on improving the task of event spotting in SoccerNet-v2 Dataset.
+Working on improving the task of action spotting in SoccerNet-v2 Dataset.
