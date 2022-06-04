@@ -2,7 +2,7 @@ Spatio-Temporal Encoding (STE) for event spotting in soccer videos.
 
 Run the main.py to train the network and evaluate the results.
 
-The model obtains 74.09% on the loose a-mAP evaluation metirc, which ranks first among other models!
+The model obtains 74.09% on the loose a-mAP evaluation metirc on test data!
 
 --------------------------------------------------------------------------------------------------------------
 
