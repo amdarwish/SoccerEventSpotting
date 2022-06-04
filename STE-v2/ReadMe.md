@@ -1,5 +1,4 @@
-**Spatio-Temporal Encoder - version 2 (STE-v2) for action spotting in soccer videos.
-**
+Spatio-Temporal Encoder - version 2 (STE-v2) for action spotting in soccer videos.
 
 This version improves the tight a-mAP evaluation metric from 40% to 58.29% on test data and 58.7% on challenge data.
 
