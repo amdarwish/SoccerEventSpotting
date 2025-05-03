@@ -128,7 +128,7 @@ if __name__ == '__main__':
     parser.add_argument('--SoccerNet_path',   required=False, type=str,   default="/path/to/SoccerNet/",     help='Path for SoccerNet' )
     parser.add_argument('--features',   required=False, type=str,   default="baidu_soccer_embeddings.npy",     help='Video features' )
     parser.add_argument('--max_epochs',   required=False, type=int,   default=20,     help='Maximum number of epochs' )
-    parser.add_argument('--load_weights',   required=False, type=str,   default=None,     help='weights to load' )
+    parser.add_argument('--load_weights',   required=True, type=str,   default=None,     help='weights to load' )
     parser.add_argument('--model_name',   required=False, type=str,   default="NetVLAD++",     help='named of the model to save' )
     parser.add_argument('--test_only',   required=False, action='store_true',  help='Perform testing only' )
 

@@ -33,10 +33,10 @@ def main(args):
 
     # create dataset
     if not args.test_only:
-        dataset_Train = SoccerNetClips(path=args.SoccerNet_path, features=args.features, split=args.split_train, version=args.version, framerate=args.framerate, window_size=args.window_size)
-        dataset_Valid = SoccerNetClips(path=args.SoccerNet_path, features=args.features, split=args.split_valid, version=args.version, framerate=args.framerate, window_size=args.window_size)
-        dataset_Valid_metric  = SoccerNetClips(path=args.SoccerNet_path, features=args.features, split=args.split_valid, version=args.version, framerate=args.framerate, window_size=args.window_size)
-    dataset_Test  = SoccerNetClipsTesting(path=args.SoccerNet_path, features=args.features, split=args.split_test, version=args.version, framerate=args.framerate, window_size=args.window_size)
+        dataset_Train = SoccerNetClips(path=args.SoccerNet_path, features=args.features, split=args.split_train, version=args.version, framerate=args.framerate, window_size=args.window_size, one_half=args.one_half)
+        dataset_Valid = SoccerNetClips(path=args.SoccerNet_path, features=args.features, split=args.split_valid, version=args.version, framerate=args.framerate, window_size=args.window_size, one_half=args.one_half)
+        dataset_Valid_metric  = SoccerNetClips(path=args.SoccerNet_path, features=args.features, split=args.split_valid, version=args.version, framerate=args.framerate, window_size=args.window_size, one_half=args.one_half)
+    dataset_Test  = SoccerNetClipsTesting(path=args.SoccerNet_path, features=args.features, split=args.split_test, version=args.version, framerate=args.framerate, window_size=args.window_size, one_half=args.one_half)
 
     if args.feature_dim is None:
         args.feature_dim = 2144#dataset_Train[0][1].shape[-1]/4
@@ -123,9 +123,10 @@ if __name__ == '__main__':
     parser = ArgumentParser(description='context aware loss function', formatter_class=ArgumentDefaultsHelpFormatter)
     
     parser.add_argument('--SoccerNet_path',   required=False, type=str,   default="/path/to/SoccerNet/",     help='Path for SoccerNet' )
-    parser.add_argument('--features',   required=False, type=str,   default="baidu_soccer_embeddings.npy",     help='Video features' )
-    parser.add_argument('--max_epochs',   required=False, type=int,   default=40,     help='Maximum number of epochs' )
-    parser.add_argument('--load_weights',   required=False, type=str,   default=None,     help='weights to load' )
+    #parser.add_argument('--features',   required=False, type=str,   default="baidu_soccer_embeddings.npy",     help='Video features' )
+    parser.add_argument('--features',   required=False, type=str,   default="ResNET_TF2_PCA512.npy",     help='Video features' )
+    parser.add_argument('--max_epochs',   required=False, type=int,   default=1,     help='Maximum number of epochs' )
+    parser.add_argument('--load_weights',   required=True, type=str,   default="models/NetVLAD++/model.pth",     help='weights to load' )
     parser.add_argument('--model_name',   required=False, type=str,   default="NetVLAD++",     help='named of the model to save' )
     parser.add_argument('--test_only',   required=False, action='store_true',  help='Perform testing only' )
 
@@ -143,7 +144,7 @@ if __name__ == '__main__':
     parser.add_argument('--NMS_window',       required=False, type=int,   default=12, help='NMS window in second' )
     parser.add_argument('--NMS_threshold',       required=False, type=float,   default=0.0, help='NMS threshold for positive results' )
 
-    parser.add_argument('--batch_size', required=False, type=int,   default=256,     help='Batch size' )
+    parser.add_argument('--batch_size', required=False, type=int,   default=8,     help='Batch size' )
     parser.add_argument('--LR',       required=False, type=float,   default=1e-03, help='Learning Rate' )
     parser.add_argument('--LRe',       required=False, type=float,   default=1e-06, help='Learning Rate end' )
     parser.add_argument('--patience', required=False, type=int,   default=10,     help='Patience before reducing LR (ReduceLROnPlateau)' )
@@ -151,6 +152,7 @@ if __name__ == '__main__':
     parser.add_argument('--GPU',        required=False, type=int,   default=-1,     help='ID of the GPU to use' )
     parser.add_argument('--max_num_worker',   required=False, type=int,   default=0, help='number of worker to load data')
     parser.add_argument('--seed',   required=False, type=int,   default=5, help='seed for reproducibility')
+    parser.add_argument('--one_half',   required=False, type=bool,   default=False, help='one half or both')
 
     # parser.add_argument('--logging_dir',       required=False, type=str,   default="log", help='Where to log' )
     parser.add_argument('--loglevel',   required=False, type=str,   default='INFO', help='logging level')

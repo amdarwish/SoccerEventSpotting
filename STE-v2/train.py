@@ -123,7 +123,8 @@ def train(dataloader,
          #   labels = labels.cuda()
             # compute output
             output = model(feats.float())
-
+            # # Prevent log(0) issues
+            output = torch.clamp(output, 1e-8, 1 - 1e-8)
             # hand written NLL criterion
             loss = criterion(labels, output)
 
@@ -135,6 +136,9 @@ def train(dataloader,
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
+                 # Clip gradients here
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0) 
+        
 
             # measure elapsed time
             batch_time.update(time.time() - end)
@@ -320,14 +324,14 @@ def testSpotting(dataloader, model, model_name, overwrite=True, NMS_window=30, N
                 json_data["UrlLocal"] = game_ID
                 json_data["predictions"] = list()
                 print("Game ID: ", game_ID)
-                for tl in spotting_grountruth:
-                    print("label: ", tl)
+                # for tl in spotting_grountruth:
+                    # print("label: ", tl)
                 for half, timestamp in enumerate([timestamp_long_half_1, timestamp_long_half_2]):
       #          for half, timestamp in enumerate([timestamp_long_half_1]):
 
                     for l in range(dataloader.dataset.num_classes):
-                        print("************************* Class = ", l)
-                        print("timestamp shape: ", timestamp.shape)
+                        # print("************************* Class = ", l)
+                        # print("timestamp shape: ", timestamp.shape)
                         spots = get_spot(
                             timestamp[:, l], timestamp[:,dataloader.dataset.num_classes:], spotting_grountruth[i], l, window=NMS_window*framerate, thresh=NMS_threshold)
                         for spot in spots:
@@ -374,7 +378,7 @@ def testSpotting(dataloader, model, model_name, overwrite=True, NMS_window=30, N
     results =  evaluate(SoccerNet_path=dataloader.dataset.path, 
                  Predictions_path=output_results,
                  split="test",
-                 prediction_file="results_spotting.json", 
+                 prediction_file=None, #"results_spotting.json", 
                  version=dataloader.dataset.version)
 
     return results
