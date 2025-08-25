@@ -22,9 +22,9 @@ import numpy as np
 import sklearn
 import sklearn.metrics
 from sklearn.metrics import average_precision_score
-from SoccerNet.Evaluation.ActionSpotting import evaluate
-from SoccerNet.Evaluation.utils import AverageMeter, EVENT_DICTIONARY_V2, INVERSE_EVENT_DICTIONARY_V2
-from SoccerNet.Evaluation.utils import EVENT_DICTIONARY_V1, INVERSE_EVENT_DICTIONARY_V1
+from ActionSpotting import evaluate
+from utils import AverageMeter, EVENT_DICTIONARY_V2, INVERSE_EVENT_DICTIONARY_V2
+from utils import EVENT_DICTIONARY_V1, INVERSE_EVENT_DICTIONARY_V1
 
 
 
@@ -119,14 +119,29 @@ def train(dataloader,
         for i, (feats, labels) in t:
             # measure data loading time
             data_time.update(time.time() - end)
-         #   feats = feats.cuda()
-         #   labels = labels.cuda()
+            # NaN checks for input features and labels
+            if torch.isnan(feats).any():
+                logging.error(f"NaN detected in input features at batch {i}, epoch {epoch}")
+                raise ValueError("NaN in input features")
+            if torch.isnan(labels).any():
+                logging.error(f"NaN detected in labels at batch {i}, epoch {epoch}")
+                raise ValueError("NaN in labels")
+            feats = feats.cuda()
+            labels = labels.cuda()
             # compute output
-            output = model(feats.float())
-            # # Prevent log(0) issues
-            output = torch.clamp(output, 1e-8, 1 - 1e-8)
+            output = model(feats)
+            # NaN check for model output
+            if torch.isnan(output).any():
+                logging.error(f"NaN detected in model output at batch {i}, epoch {epoch}")
+                raise ValueError("NaN in model output")
+            output = torch.clamp(output, 1e-5, 1 - 1e-5)
+
             # hand written NLL criterion
             loss = criterion(labels, output)
+            # NaN check for loss
+            if torch.isnan(loss):
+                logging.error(f"NaN detected in loss at batch {i}, epoch {epoch}")
+                raise ValueError("NaN in loss value")
 
             # measure accuracy and record loss
             losses.update(loss.item(), feats.size(0))
@@ -135,9 +150,9 @@ def train(dataloader,
                 # compute gradient and do SGD step
                 optimizer.zero_grad()
                 loss.backward()
-                optimizer.step()
                  # Clip gradients here
-                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0) 
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=0.5, norm_type=2.0) 
+                optimizer.step()
         
 
             # measure elapsed time
@@ -171,7 +186,7 @@ def test(dataloader, model, model_name):
         for i, (feats, labels) in t:
             # measure data loading time
             data_time.update(time.time() - end)
-          #  feats = feats.cuda()
+            feats = feats.cuda()
             # labels = labels.cuda()
 
             # print(feats.shape)
@@ -179,7 +194,7 @@ def test(dataloader, model, model_name):
             # print(feats.shape)
 
             # compute output
-            output = model(feats.float())
+            output = model(feats)
 
             all_labels.append(labels.detach().numpy())
             all_outputs.append(output.cpu().detach().numpy())
@@ -202,7 +217,7 @@ def test(dataloader, model, model_name):
     # t.set_description()
     # print(AP)
     mAP = np.mean(AP)
-    print("Without NMS ! ", mAP, AP)
+    print(mAP, AP)
 
     return mAP
 
@@ -230,8 +245,7 @@ def testSpotting(dataloader, model, model_name, overwrite=True, NMS_window=30, N
 
         end = time.time()
         with tqdm(enumerate(dataloader), total=len(dataloader)) as t:
-            for i, (game_ID, feat_half1, feat_half2, label_half1, label_half2) in t:            
-        #    for i, (game_ID, feat_half1, label_half1) in t:
+            for i, (game_ID, feat_half1, feat_half2, label_half1, label_half2) in t:
                 data_time.update(time.time() - end)
 
                 # Batch size of 1
@@ -248,17 +262,18 @@ def testSpotting(dataloader, model, model_name, overwrite=True, NMS_window=30, N
                     start_frame = BS*b
                     end_frame = BS*(b+1) if BS * \
                         (b+1) < len(feat_half1) else len(feat_half1)
-                    feat = feat_half1[start_frame:end_frame]
-                    output = model(feat.float()).cpu().detach().numpy()
+                    feat = feat_half1[start_frame:end_frame].cuda()
+                    output = model(feat).cpu().detach().numpy()
                     timestamp_long_half_1.append(output)
                 timestamp_long_half_1 = np.concatenate(timestamp_long_half_1)
+
                 timestamp_long_half_2 = []
                 for b in range(int(np.ceil(len(feat_half2)/BS))):
                     start_frame = BS*b
                     end_frame = BS*(b+1) if BS * \
                         (b+1) < len(feat_half2) else len(feat_half2)
-                    feat = feat_half2[start_frame:end_frame]
-                    output = model(feat.float()).cpu().detach().numpy()
+                    feat = feat_half2[start_frame:end_frame].cuda()
+                    output = model(feat).cpu().detach().numpy()
                     timestamp_long_half_2.append(output)
                 timestamp_long_half_2 = np.concatenate(timestamp_long_half_2)
 
@@ -323,20 +338,16 @@ def testSpotting(dataloader, model, model_name, overwrite=True, NMS_window=30, N
                 json_data = dict()
                 json_data["UrlLocal"] = game_ID
                 json_data["predictions"] = list()
-                print("Game ID: ", game_ID)
-                # for tl in spotting_grountruth:
-                    # print("label: ", tl)
-                for half, timestamp in enumerate([timestamp_long_half_1, timestamp_long_half_2]):
-      #          for half, timestamp in enumerate([timestamp_long_half_1]):
 
+                for half, timestamp in enumerate([timestamp_long_half_1, timestamp_long_half_2]):
                     for l in range(dataloader.dataset.num_classes):
-                        # print("************************* Class = ", l)
-                        # print("timestamp shape: ", timestamp.shape)
                         spots = get_spot(
                             timestamp[:, l], timestamp[:,dataloader.dataset.num_classes:], spotting_grountruth[i], l, window=NMS_window*framerate, thresh=NMS_threshold)
                         for spot in spots:
+                            # print("spot", int(spot[0]), spot[1], spot)
                             frame_index = int(spot[0])
                             confidence = spot[1]
+                            # confidence = predictions_half_1[frame_index, l]
 
                             seconds = int((frame_index//framerate)%60)
                             minutes = int((frame_index//framerate)//60)
@@ -367,18 +378,20 @@ def testSpotting(dataloader, model, model_name, overwrite=True, NMS_window=30, N
                         zipobj.write(fn, fn[rootlen:])
 
         # zip folder
+
         zipResults(zip_path = output_results,
                 target_dir = os.path.join("models", model_name, output_folder),
                 filename="results_spotting.json")
 
-   # if split == "challenge": 
-   #     print("Visit eval.ai to evalaute performances on Challenge set")
-   #     return None
+    if split == "challenge": 
+        print("Visit eval.ai to evalaute performances on Challenge set")
+        return None
         
     results =  evaluate(SoccerNet_path=dataloader.dataset.path, 
                  Predictions_path=output_results,
                  split="test",
-                 prediction_file=None, #"results_spotting.json", 
-                 version=dataloader.dataset.version)
+                 prediction_file="results_spotting.json", 
+                 version=dataloader.dataset.version,
+                 framerate=dataloader.dataset.framerate)
 
     return results

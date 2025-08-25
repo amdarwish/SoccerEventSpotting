@@ -55,13 +55,12 @@ def feats2clip(feats, stride, clip_length, padding = "replicate_last", off=0):
 
 class SoccerNetClips(Dataset):
     def __init__(self, path, features="ResNET_PCA512.npy", split=["train"], version=1, 
-                framerate=2, window_size=15, one_half=False):
+                framerate=2, window_size=15):
         self.path = path
         self.listGames = getListGames(split)
         self.features = features
         self.window_size_frame = window_size*framerate
         self.version = version
-        self.one_half = one_half
         if version == 1:
             self.num_classes = 3
             self.labels="Labels.json"
@@ -72,47 +71,34 @@ class SoccerNetClips(Dataset):
 
         logging.info("Checking/Download features and labels locally")
         downloader = SoccerNetDownloader(path)
-        if self.one_half:
-           downloader.downloadGames(files=[self.labels, f"1_{self.features}"], split=split, verbose=False,randomized=True)
-        else:
-            downloader.downloadGames(files=[self.labels, f"1_{self.features}", f"2_{self.features}"], split=split, verbose=False,randomized=True)
+        downloader.downloadGames(files=[self.labels, f"1_{self.features}", f"2_{self.features}"], split=split, verbose=False,randomized=True)
 
 
         logging.info("Pre-compute clips")
 
         self.game_feats = list()
         self.game_labels = list()
-        self.game_labels2 = list()
-        
-         ############################################### 
-        game_counter = 0
-         ############################################### 
 
+        # game_counter = 0
         for game in tqdm(self.listGames):
             # Load features
             feat_half1 = np.load(os.path.join(self.path, game, "1_" + self.features))
-            feat_half1 = feat_half1.reshape(-1, feat_half1.shape[-1])         
-            #feat_half1 = skimage.measure.block_reduce(feat_half1, (1,4), np.max)            
-            
-            if not self.one_half:
-                feat_half2 = np.load(os.path.join(self.path, game, "2_" + self.features))
-                feat_half2 = feat_half2.reshape(-1, feat_half2.shape[-1])
-                #feat_half2 = skimage.measure.block_reduce(feat_half2, (1,4), np.max)
+            feat_half1 = feat_half1.reshape(-1, feat_half1.shape[-1])
+            feat_half1 = skimage.measure.block_reduce(feat_half1, (1,4), np.max)
+            feat_half2 = np.load(os.path.join(self.path, game, "2_" + self.features))
+            feat_half2 = feat_half2.reshape(-1, feat_half2.shape[-1])
+            feat_half2 = skimage.measure.block_reduce(feat_half2, (1,4), np.max)
 
             feat_half1 = feats2clip(torch.from_numpy(feat_half1), stride=self.window_size_frame, clip_length=self.window_size_frame)
-            if not self.one_half:
-                feat_half2 = feats2clip(torch.from_numpy(feat_half2), stride=self.window_size_frame, clip_length=self.window_size_frame)
-    
-            
+            feat_half2 = feats2clip(torch.from_numpy(feat_half2), stride=self.window_size_frame, clip_length=self.window_size_frame)
+
             # Load labels
             labels = json.load(open(os.path.join(self.path, game, self.labels)))
 
-            label_half1  = np.zeros((feat_half1.shape[0], self.num_classes+1+self.window_size_frame))            
+            label_half1 = np.zeros((feat_half1.shape[0], self.num_classes+1+self.window_size_frame))
             label_half1[:,0]=1 # those are BG classes
-            
-            if not self.one_half:
-                label_half2 = np.zeros((feat_half2.shape[0], self.num_classes+1+self.window_size_frame))
-                label_half2[:,0]=1 # those are BG classes
+            label_half2 = np.zeros((feat_half2.shape[0], self.num_classes+1+self.window_size_frame))
+            label_half2[:,0]=1 # those are BG classes
 
 
             for annotation in labels["annotations"]:
@@ -139,34 +125,26 @@ class SoccerNetClips(Dataset):
                 # if label outside temporal of view
                 if half == 1 and frame//self.window_size_frame>=label_half1.shape[0]:
                     continue
-                if not self.one_half:
-                    if half == 2 and frame//self.window_size_frame>=label_half2.shape[0]:
-                        continue
+                if half == 2 and frame//self.window_size_frame>=label_half2.shape[0]:
+                    continue
 
                 if half == 1:
                     label_half1[frame//self.window_size_frame][0] = 0 # not BG anymore
                     label_half1[frame//self.window_size_frame][label+1] = 1 # that's my class
                     label_half1[frame//self.window_size_frame][self.num_classes+1+frame%self.window_size_frame] = 1 # that's my frame
 
-                if not self.one_half:
-                    if half == 2:
-                        label_half2[frame//self.window_size_frame][0] = 0 # not BG anymore
-                        label_half2[frame//self.window_size_frame][label+1] = 1 # that's my class
-                        label_half2[frame//self.window_size_frame][self.num_classes+1+frame%self.window_size_frame] = 1 # that's my frame
-
-                
+                if half == 2:
+                    label_half2[frame//self.window_size_frame][0] = 0 # not BG anymore
+                    label_half2[frame//self.window_size_frame][label+1] = 1 # that's my class
+                    label_half2[frame//self.window_size_frame][self.num_classes+1+frame%self.window_size_frame] = 1 # that's my frame
+            
             self.game_feats.append(feat_half1)
-            if not self.one_half:
-                self.game_feats.append(feat_half2)
+            self.game_feats.append(feat_half2)
             self.game_labels.append(label_half1)
-
-            if not self.one_half:
-                self.game_labels.append(label_half2)
-        
+            self.game_labels.append(label_half2)
 
         self.game_feats = np.concatenate(self.game_feats)
         self.game_labels = np.concatenate(self.game_labels)
-
 
 
 
@@ -187,7 +165,7 @@ class SoccerNetClips(Dataset):
 
 class SoccerNetClipsTesting(Dataset):
     def __init__(self, path, features="ResNET_PCA512.npy", split=["test"], version=1, 
-                framerate=2, window_size=15, one_half=False):
+                framerate=2, window_size=15):
         self.path = path
         self.listGames = getListGames(split)
         self.features = features
@@ -195,7 +173,6 @@ class SoccerNetClipsTesting(Dataset):
         self.framerate = framerate
         self.version = version
         self.split=split
-        self.one_half=one_half
         if version == 1:
             self.dict_event = EVENT_DICTIONARY_V1
             self.num_classes = 3
@@ -208,16 +185,11 @@ class SoccerNetClipsTesting(Dataset):
         logging.info("Checking/Download features and labels locally")
         downloader = SoccerNetDownloader(path)
         for s in split:
-            if not self.one_half:
-                if s == "challenge":
-                    downloader.downloadGames(files=[f"1_{self.features}", f"2_{self.features}"], split=[s], verbose=False,randomized=True)
-                else:
-                    downloader.downloadGames(files=[self.labels, f"1_{self.features}", f"2_{self.features}"], split=[s], verbose=False,randomized=True)
+            if s == "challenge":
+                downloader.downloadGames(files=[f"1_{self.features}", f"2_{self.features}"], split=[s], verbose=False,randomized=True)
             else:
-                if s == "challenge":
-                    downloader.downloadGames(files=[f"1_{self.features}"], split=[s], verbose=False,randomized=True)
-                else:
-                    downloader.downloadGames(files=[self.labels, f"1_{self.features}"], split=[s], verbose=False,randomized=True)
+                downloader.downloadGames(files=[self.labels, f"1_{self.features}", f"2_{self.features}"], split=[s], verbose=False,randomized=True)
+
 
     def __getitem__(self, index):
         """
@@ -232,18 +204,14 @@ class SoccerNetClipsTesting(Dataset):
         # Load features
         feat_half1 = np.load(os.path.join(self.path, self.listGames[index], "1_" + self.features))
         feat_half1 = feat_half1.reshape(-1, feat_half1.shape[-1])
-        #feat_half1 = skimage.measure.block_reduce(feat_half1, (1,4), np.max)
-        if not self.one_half:
-            feat_half2 = np.load(os.path.join(self.path, self.listGames[index], "2_" + self.features))
-            feat_half2 = feat_half2.reshape(-1, feat_half2.shape[-1])
-            #feat_half2 = skimage.measure.block_reduce(feat_half2, (1,4), np.max)
+        feat_half1 = skimage.measure.block_reduce(feat_half1, (1,4), np.max)
+        feat_half2 = np.load(os.path.join(self.path, self.listGames[index], "2_" + self.features))
+        feat_half2 = feat_half2.reshape(-1, feat_half2.shape[-1])
+        feat_half2 = skimage.measure.block_reduce(feat_half2, (1,4), np.max)
 
         # Load labels
         label_half1 = np.zeros((feat_half1.shape[0], self.num_classes))
-        if not self.one_half:
-            label_half2 = np.zeros((feat_half2.shape[0], self.num_classes))
-
-
+        label_half2 = np.zeros((feat_half2.shape[0], self.num_classes))
 
         # check if annoation exists
         if os.path.exists(os.path.join(self.path, self.listGames[index], self.labels)):
@@ -279,12 +247,9 @@ class SoccerNetClipsTesting(Dataset):
                     frame = min(frame, feat_half1.shape[0]-1)
                     label_half1[frame][label] = value
 
-                if not self.one_half:
-                    if half == 2:
-                        frame = min(frame, feat_half2.shape[0]-1)
-                        label_half2[frame][label] = value
-                else:
-                    label_half2 = None
+                if half == 2:
+                    frame = min(frame, feat_half2.shape[0]-1)
+                    label_half2[frame][label] = value
 
         
             
@@ -292,16 +257,14 @@ class SoccerNetClipsTesting(Dataset):
         feat_half1 = feats2clip(torch.from_numpy(feat_half1), 
                         stride=1, off=int(self.window_size_frame/2), 
                         clip_length=self.window_size_frame)
-        if not self.one_half:
-            feat_half2 = feats2clip(torch.from_numpy(feat_half2), 
-                            stride=1, off=int(self.window_size_frame/2), 
-                            clip_length=self.window_size_frame)
-        else:
-            feat_half2 = None
+
+        feat_half2 = feats2clip(torch.from_numpy(feat_half2), 
+                        stride=1, off=int(self.window_size_frame/2), 
+                        clip_length=self.window_size_frame)
 
         
         return self.listGames[index], feat_half1, feat_half2, label_half1, label_half2
 
-
     def __len__(self):
         return len(self.listGames)
+
